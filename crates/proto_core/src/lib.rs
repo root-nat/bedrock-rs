@@ -2,7 +2,7 @@ extern crate core;
 
 use std::io::{Read, Write};
 
-use crate::error::ProtoCodecError;
+use crate::error::{PacketCodecError, ProtoCodecError};
 
 mod endian;
 pub mod error;
@@ -36,9 +36,9 @@ pub trait Packets: Sized {
         &self,
         header: &PacketHeader,
         stream: &mut W,
-    ) -> Result<(), ProtoCodecError>;
+    ) -> Result<(), PacketCodecError>;
 
-    fn deserialize<R: Read>(stream: &mut R) -> Result<(Self, PacketHeader), ProtoCodecError>;
+    fn deserialize<R: Read>(stream: &mut R) -> Result<(Self, PacketHeader), PacketCodecError>;
 
     fn size_hint(&self, header: &PacketHeader) -> usize;
 }

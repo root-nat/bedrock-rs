@@ -412,7 +412,11 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
                 #struct_ident::#name(pk) => {
                     match <<#struct_ident as ProtoVersionPackets>::#name as bedrockrs_proto_core::ProtoCodec>::serialize(pk, stream) {
                         Ok(_) => {},
-                        Err(err) => return Err(err),
+                        Err(err) => return Err(::bedrockrs_proto_core::error::PacketCodecError::InvalidPacket {
+                            packet_name: stringify!(#name),
+                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as ::bedrockrs_proto_core::Packet>::ID,
+                            error: err
+                        }),
                     };
                 },
             }
@@ -423,7 +427,11 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
                 <<#struct_ident as ProtoVersionPackets>::#name as ::bedrockrs_proto_core::Packet>::ID => {
                     match <<#struct_ident as ProtoVersionPackets>::#name as ::bedrockrs_proto_core::ProtoCodec>::deserialize(stream) {
                         Ok(pk) => #struct_ident::#name(pk),
-                        Err(e) => return Err(e),
+                        Err(err) => return Err(::bedrockrs_proto_core::error::PacketCodecError::InvalidPacket {
+                            packet_name: stringify!(#name),
+                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as ::bedrockrs_proto_core::Packet>::ID,
+                            error: err
+                        }),
                     }
                 },
             }
@@ -462,24 +470,38 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                fn serialize<W: ::std::io::Write>(&self, header: &::bedrockrs_proto_core::PacketHeader, stream: &mut W) -> Result<(), ::bedrockrs_proto_core::error::ProtoCodecError> {
-                    <::bedrockrs_proto_core::PacketHeader as ::bedrockrs_proto_core::ProtoCodec>::serialize(header, stream)?;
+                fn serialize<W: ::std::io::Write>(&self, header: &::bedrockrs_proto_core::PacketHeader, stream: &mut W) -> Result<(), ::bedrockrs_proto_core::error::PacketCodecError> {
+                    <::bedrockrs_proto_core::PacketHeader as ::bedrockrs_proto_core::ProtoCodec>::serialize(header, stream)
+                        .map_err(::bedrockrs_proto_core::error::PacketCodecError::InvalidHeader)?;
+
                     match self {
                         #(#packet_ser)*
-                        #struct_ident::Unknown(_, buf) => stream.write_all(buf)?,
+                        #struct_ident::Unknown(_, buf) => stream.write_all(buf)
+                            .map_err(|e| ::bedrockrs_proto_core::error::PacketCodecError::InvalidPacket {
+                                packet_name: "Unknown",
+                                packet_id: header.packet_id,
+                                error: e.into()
+                            })?,
                     };
 
                     Ok(())
                 }
 
                 #[inline]
-                fn deserialize<R: ::std::io::Read>(stream: &mut R) -> Result<(Self, ::bedrockrs_proto_core::PacketHeader), ::bedrockrs_proto_core::error::ProtoCodecError> {
-                    let header = <::bedrockrs_proto_core::PacketHeader as ::bedrockrs_proto_core::ProtoCodec>::deserialize(stream)?;
+                fn deserialize<R: ::std::io::Read>(stream: &mut R) -> Result<(Self, ::bedrockrs_proto_core::PacketHeader), ::bedrockrs_proto_core::error::PacketCodecError> {
+                    let header = <::bedrockrs_proto_core::PacketHeader as ::bedrockrs_proto_core::ProtoCodec>::deserialize(stream)
+                        .map_err(::bedrockrs_proto_core::error::PacketCodecError::InvalidHeader)?;
+
                     let packet = match header.packet_id {
                         #(#packet_de)*
                         unknown => {
                             let mut buf = Vec::new();
-                            stream.read_to_end(&mut buf)?;
+                            stream.read_to_end(&mut buf)
+                                .map_err(|e| ::bedrockrs_proto_core::error::PacketCodecError::InvalidPacket {
+                                    packet_name: "Unknown",
+                                    packet_id: header.packet_id,
+                                    error: e.into(),
+                                })?;
                             #struct_ident::Unknown(unknown, buf.into_boxed_slice())
                         },
                     };

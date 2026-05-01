@@ -50,3 +50,15 @@ impl From<Infallible> for ProtoCodecError {
         unreachable!()
     }
 }
+
+#[derive(Error, Debug)]
+pub enum PacketCodecError {
+    #[error("failed to de/serialize packet header: {0}")]
+    InvalidHeader(ProtoCodecError),
+    #[error("failed to de/serialize packet {packet_name} (id: {packet_id}): {error}")]
+    InvalidPacket {
+        packet_name: &'static str,
+        packet_id: u16,
+        error: ProtoCodecError,
+    },
+}
