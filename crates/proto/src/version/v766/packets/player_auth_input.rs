@@ -18,7 +18,7 @@ pub struct PlayerAuthInputPacket<V: ProtoVersion> {
     pub input_mode: V::InputMode,
     pub play_mode: ClientPlayMode,
     pub new_interaction_model: V::NewInteractionModel,
-    pub interact_rotation: (f32, f32, f32),
+    pub interact_rotation: (f32, f32),
     pub client_tick: u64,
     pub velocity: (f32, f32, f32),
     pub item_use_transaction: Option<V::PackedItemUseLegacyInventoryTransaction>, // If input_data has PlayerAuthInputPacket<V>::InputData::PerformItemInteraction set.
@@ -140,7 +140,7 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
         <V::InputMode as ProtoCodec>::serialize(&self.input_mode, stream)?;
         <ClientPlayMode as ProtoCodec>::serialize(&self.play_mode, stream)?;
         <V::NewInteractionModel as ProtoCodec>::serialize(&self.new_interaction_model, stream)?;
-        <(f32, f32, f32) as ProtoCodecLE>::serialize(&self.interact_rotation, stream)?;
+        <(f32, f32) as ProtoCodecLE>::serialize(&self.interact_rotation, stream)?;
         <u64 as ProtoCodecVAR>::serialize(&self.client_tick, stream)?;
         <(f32, f32, f32) as ProtoCodecLE>::serialize(&self.velocity, stream)?;
         if self.input_data & PlayerAuthInputFlags::PerformItemInteraction as u128 != 0 {
@@ -169,6 +169,7 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
         }
         <(f32, f32) as ProtoCodecLE>::serialize(&self.analog_move_vector, stream)?;
         <(f32, f32, f32) as ProtoCodecLE>::serialize(&self.camera_orientation, stream)?;
+        <(f32, f32) as ProtoCodecLE>::serialize(&self.raw_move_vector, stream)?;
 
         Ok(())
     }
@@ -182,7 +183,7 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
         let input_mode = <V::InputMode as ProtoCodec>::deserialize(stream)?;
         let play_mode = <ClientPlayMode as ProtoCodec>::deserialize(stream)?;
         let new_interaction_model = <V::NewInteractionModel as ProtoCodec>::deserialize(stream)?;
-        let interact_rotation = <(f32, f32, f32) as ProtoCodecLE>::deserialize(stream)?;
+        let interact_rotation = <(f32, f32) as ProtoCodecLE>::deserialize(stream)?;
         let client_tick = <u64 as ProtoCodecVAR>::deserialize(stream)?;
         let velocity = <(f32, f32, f32) as ProtoCodecLE>::deserialize(stream)?;
         let item_use_transaction = match input_data
