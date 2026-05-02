@@ -1,5 +1,6 @@
 extern crate core;
 
+use std::any::Any;
 use std::io::{Read, Write};
 
 use crate::error::{PacketCodecError, ProtoCodecError};
@@ -27,6 +28,37 @@ pub trait Packet: Sized + ProtoCodec {
     const ENCRYPT: bool;
 }
 
+pub trait PacketDyn: Any {
+    fn id(&self) -> u16;
+    fn name(&self) -> &'static str;
+}
+
+impl<T: Packet + 'static> PacketDyn for T {
+    fn id(&self) -> u16 {
+        T::ID
+    }
+
+    fn name(&self) -> &'static str {
+        std::any::type_name::<T>()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct UnknownPacket {
+    pub id: u16,
+    pub buf: Box<[u8]>,
+}
+
+impl PacketDyn for UnknownPacket {
+    fn id(&self) -> u16 {
+        self.id
+    }
+
+    fn name(&self) -> &'static str {
+        std::any::type_name::<UnknownPacket>()
+    }
+}
+
 pub trait Packets: Sized {
     fn id(&self) -> u16;
     fn compress(&self) -> bool;
@@ -41,4 +73,7 @@ pub trait Packets: Sized {
     fn deserialize<R: Read>(stream: &mut R) -> Result<(Self, PacketHeader), PacketCodecError>;
 
     fn size_hint(&self, header: &PacketHeader) -> usize;
+
+    fn as_dyn(&self) -> &dyn PacketDyn;
+    fn into_dyn(self) -> Box<dyn PacketDyn>;
 }
