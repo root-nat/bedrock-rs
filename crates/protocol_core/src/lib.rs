@@ -53,8 +53,15 @@ pub struct UnknownPacket {
 }
 
 impl DynPacket for UnknownPacket {
+    #[inline]
     fn id(&self) -> u16 {
         self.id
+    }
+
+    #[cfg(feature = "dyn-name")]
+    #[inline]
+    fn name(&self) -> &'static str {
+        "UnknownPacket"
     }
 }
 
