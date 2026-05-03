@@ -61,7 +61,7 @@ impl DynPacket for UnknownPacket {
     #[cfg(feature = "dyn-name")]
     #[inline]
     fn name(&self) -> &'static str {
-        "UnknownPacket"
+        std::any::type_name::<UnknownPacket>()
     }
 }
 
