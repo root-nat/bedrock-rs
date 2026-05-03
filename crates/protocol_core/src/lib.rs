@@ -65,7 +65,7 @@ impl DynPacket for UnknownPacket {
     }
 }
 
-pub trait Packets: DynPacket + Sized {
+pub trait Packets: Sized {
     fn serialize<W: Write>(
         &self,
         header: &PacketHeader,
