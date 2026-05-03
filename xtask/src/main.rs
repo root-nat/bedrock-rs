@@ -1,16 +1,59 @@
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::{fs, io};
 use syn::parse::ParseStream;
 use syn::{
-    LitInt, LitStr, Path, Token, braced, bracketed, parenthesized, parse::Parse,
+    File, LitInt, LitStr, Path, Token, braced, bracketed, parenthesized, parse::Parse,
     punctuated::Punctuated,
 };
+
+fn main() {
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+
+    let protocol = project_root.join("crates/protocol/");
+
+    let text =
+        fs::read_to_string(protocol.join("def/versions.def.rs")).expect("versions file not found");
+    let tokens = TokenStream::from_str(&text).unwrap();
+
+    clear_directory(protocol.join("src/generated").to_str().unwrap()).unwrap();
+
+    let version_tokens = define_versions_internal(tokens, protocol.as_path());
+    let file = syn::parse2::<File>(version_tokens).unwrap();
+
+    fs::write(
+        protocol.join("src/generated/mod.rs"),
+        prettyplease::unparse(&file),
+    )
+    .unwrap();
+}
+
+fn clear_directory(path: &str) -> io::Result<()> {
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        let path = entry.path();
+
+        if meta.is_dir() {
+            fs::remove_dir_all(&path)?;
+        } else {
+            fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
 
 mod kw {
     use syn::custom_keyword;
 
+    custom_keyword!(versions);
     custom_keyword!(packets);
     custom_keyword!(types);
     custom_keyword!(enums);
@@ -55,9 +98,17 @@ enum DefineVersionsDiffEntry {
 
 impl Parse for DefineVersionsInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(DefineVersionsInput {
-            versions: Punctuated::parse_terminated(input)?,
-        })
+        input.parse::<kw::versions>()?;
+        input.parse::<Token![!]>()?;
+
+        let bracket;
+        bracketed!(bracket in input);
+
+        let versions = Punctuated::parse_terminated(&bracket)?;
+
+        input.parse::<Token![;]>()?;
+
+        Ok(DefineVersionsInput { versions })
     }
 }
 
@@ -189,8 +240,8 @@ impl Parse for DefineVersionsDiffEntry {
     }
 }
 
-pub fn define_versions_internal(input: TokenStream) -> TokenStream {
-    let DefineVersionsInput { versions } = syn::parse_macro_input!(input as DefineVersionsInput);
+pub fn define_versions_internal(input: TokenStream, path: &std::path::Path) -> TokenStream {
+    let DefineVersionsInput { versions } = syn::parse2::<DefineVersionsInput>(input).unwrap();
 
     let mut versions_vec = versions.into_iter().collect::<Vec<_>>();
 
@@ -219,7 +270,7 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             Ok(acc)
         }) {
         Ok(acc) => acc,
-        Err(e) => return e.into_compile_error().into(),
+        Err(e) => return e.into_compile_error(),
     };
 
     let all_types = match versions_vec
@@ -245,7 +296,7 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             Ok(acc)
         }) {
         Ok(acc) => acc,
-        Err(e) => return e.into_compile_error().into(),
+        Err(e) => return e.into_compile_error(),
     };
 
     let all_enums = match versions_vec
@@ -271,22 +322,22 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             Ok(acc)
         }) {
         Ok(acc) => acc,
-        Err(e) => return e.into_compile_error().into(),
+        Err(e) => return e.into_compile_error(),
     };
 
     let proto_version_packets = all_packets
         .iter()
-        .map(|p| quote!(type #p: ::bedrock_protocol_core::ProtoCodec + Clone + ::std::fmt::Debug;))
+        .map(|p| quote!(type #p: bedrock_protocol_core::ProtoCodec + Clone + std::fmt::Debug + Send + Sync + 'static;))
         .collect::<Vec<_>>();
 
     let proto_version_types = all_types
         .iter()
-        .map(|p| quote!(type #p: ::bedrock_protocol_core::ProtoCodec + Clone + ::std::fmt::Debug;))
+        .map(|p| quote!(type #p: bedrock_protocol_core::ProtoCodec + Clone + std::fmt::Debug + Send + Sync + 'static;))
         .collect::<Vec<_>>();
 
     let proto_version_enums = all_enums
         .iter()
-        .map(|p| quote!(type #p: ::bedrock_protocol_core::ProtoCodec + Clone + ::std::fmt::Debug;))
+        .map(|p| quote!(type #p: bedrock_protocol_core::ProtoCodec + Clone + std::fmt::Debug + Send + Sync + 'static;))
         .collect::<Vec<_>>();
 
     let proto_version = quote! {
@@ -302,7 +353,7 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             #(#proto_version_enums)*
         }
 
-        pub trait ProtoVersion: ProtoVersionPackets + ProtoVersionTypes + ProtoVersionEnums {
+        pub trait ProtoVersion: ProtoVersionPackets + ProtoVersionTypes + ProtoVersionEnums + std::fmt::Debug + Send + Sync + 'static {
             const PROTOCOL_VERSION: u32;
             const PROTOCOL_BRANCH: &str;
             const GAME_VERSION: &str;
@@ -311,20 +362,20 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
     };
 
     let mut previous_raknet_version: Option<u8> = None;
-    let mut previous_packets = HashMap::<Ident, proc_macro2::TokenStream>::new();
-    let mut previous_types = HashMap::<Ident, proc_macro2::TokenStream>::new();
-    let mut previous_enums = HashMap::<Ident, proc_macro2::TokenStream>::new();
+    let mut previous_packets = HashMap::<Ident, TokenStream>::new();
+    let mut previous_types = HashMap::<Ident, TokenStream>::new();
+    let mut previous_enums = HashMap::<Ident, TokenStream>::new();
 
-    let mut versions_stream = proc_macro2::TokenStream::new();
+    let mut versions_stream = TokenStream::new();
     for entry in &versions_vec {
         if let Err(e) = collapse(&entry.packets, &mut previous_packets) {
-            return e.into_compile_error().into();
+            return e.into_compile_error();
         }
         if let Err(e) = collapse(&entry.types, &mut previous_types) {
-            return e.into_compile_error().into();
+            return e.into_compile_error();
         }
         if let Err(e) = collapse(&entry.enums, &mut previous_enums) {
-            return e.into_compile_error().into();
+            return e.into_compile_error();
         }
 
         if let Some(raknet_version) = entry.raknet_version {
@@ -333,8 +384,7 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
 
         let Some(raknet_version) = previous_raknet_version else {
             return syn::Error::new(Span::call_site(), "raknet_version not defined")
-                .into_compile_error()
-                .into();
+                .into_compile_error();
         };
 
         let version = entry.version;
@@ -387,34 +437,22 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
         let packet_variants = previous_packets
             .keys()
             .map(|k| {
-                quote! { #k(<Self as ProtoVersionPackets>::#k), }
+                quote! { #k(Box<<Self as ProtoVersionPackets>::#k>), }
             })
             .collect::<Vec<_>>();
 
         let packet_id = previous_packets.keys().map(|name| {
-            quote! { #struct_ident::#name(_) => { return <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::ID; }, }
+            quote! { #struct_ident::#name(_) => <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::Packet>::ID, }
         });
 
-        let packet_compress = previous_packets.keys().map(|name| {
-            quote! { #struct_ident::#name(_) => { return <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::COMPRESS; }, }
-        });
-
-        let packet_encrypt = previous_packets.keys().map(|name| {
-            quote! { #struct_ident::#name(_) => { return <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::ENCRYPT; }, }
-        });
-
-        let packet_size_prediction = previous_packets.keys().map(|name| {
-            quote! { #struct_ident::#name(pk) => <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::ProtoCodec>::size_hint(pk), }
-        });
-
-        let packet_ser = previous_packets.keys().map(|name| {
+        let packet_serialize = previous_packets.keys().map(|name| {
             quote! {
                 #struct_ident::#name(pk) => {
-                    match <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::ProtoCodec>::serialize(pk, stream) {
+                    match <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::ProtoCodec>::serialize(pk.as_ref(), stream) {
                         Ok(_) => {},
-                        Err(err) => return Err(::bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
+                        Err(err) => return Err(bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
                             packet_name: stringify!(#name),
-                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::ID,
+                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::Packet>::ID,
                             error: err
                         }),
                     };
@@ -422,14 +460,14 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             }
         });
 
-        let packet_de = previous_packets.keys().map(|name| {
+        let packet_deserialize = previous_packets.keys().map(|name| {
             quote! {
-                <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::ID => {
-                    match <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::ProtoCodec>::deserialize(stream) {
-                        Ok(pk) => #struct_ident::#name(pk),
-                        Err(err) => return Err(::bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
+                <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::Packet>::ID => {
+                    match <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::ProtoCodec>::deserialize(stream) {
+                        Ok(pk) => #struct_ident::#name(Box::new(pk)),
+                        Err(err) => return Err(bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
                             packet_name: stringify!(#name),
-                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as ::bedrock_protocol_core::Packet>::ID,
+                            packet_id: <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::Packet>::ID,
                             error: err
                         }),
                     }
@@ -437,47 +475,50 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
             }
         });
 
+        let packet_size_hint = previous_packets.keys().map(|name| {
+            quote! { #struct_ident::#name(pk) => <<#struct_ident as ProtoVersionPackets>::#name as bedrock_protocol_core::ProtoCodec>::size_hint(pk.as_ref()), }
+        });
+
+        let packet_inner = previous_packets.keys().map(|name| {
+            quote! { #struct_ident::#name(pk) => pk.as_ref(), }
+        });
+
+        let packet_into_inner = previous_packets.keys().map(|name| {
+            quote! { #struct_ident::#name(pk) => pk, }
+        });
+
         let version_tokens = quote! {
+            use crate::ProtoVersion;
+            use crate::ProtoVersionPackets;
+            use crate::ProtoVersionTypes;
+            use crate::ProtoVersionEnums;
+
             #[derive(Clone, std::fmt::Debug)]
             pub enum #struct_ident {
                 #(#packet_variants)*
-                Unknown(u16, Box<[u8]>),
+                Unknown(Box<bedrock_protocol_core::UnknownPacket>),
             }
 
-            impl ::bedrock_protocol_core::Packets for #struct_ident {
+            impl bedrock_protocol_core::DynPacket for #struct_ident {
                 #[inline]
                 fn id(&self) -> u16 {
                     match self {
                         #(#packet_id)*
-                        #struct_ident::Unknown(id, _) => { return *id; },
-                    };
+                        #struct_ident::Unknown(pk) => pk.id,
+                    }
                 }
+            }
 
+            impl bedrock_protocol_core::Packets for #struct_ident {
                 #[inline]
-                fn compress(&self) -> bool {
-                    match self {
-                        #(#packet_compress)*
-                        #struct_ident::Unknown(_, _) => { return true; },
-                    };
-                }
-
-                #[inline]
-                fn encrypt(&self) -> bool {
-                    match self {
-                        #(#packet_encrypt)*
-                        #struct_ident::Unknown(_, _) => { return true; },
-                    };
-                }
-
-                #[inline]
-                fn serialize<W: ::std::io::Write>(&self, header: &::bedrock_protocol_core::PacketHeader, stream: &mut W) -> Result<(), ::bedrock_protocol_core::error::PacketCodecError> {
-                    <::bedrock_protocol_core::PacketHeader as ::bedrock_protocol_core::ProtoCodec>::serialize(header, stream)
-                        .map_err(::bedrock_protocol_core::error::PacketCodecError::InvalidHeader)?;
+                fn serialize<W: std::io::Write>(&self, header: &bedrock_protocol_core::PacketHeader, stream: &mut W) -> Result<(), bedrock_protocol_core::error::PacketCodecError> {
+                    <bedrock_protocol_core::PacketHeader as bedrock_protocol_core::ProtoCodec>::serialize(header, stream)
+                        .map_err(bedrock_protocol_core::error::PacketCodecError::InvalidHeader)?;
 
                     match self {
-                        #(#packet_ser)*
-                        #struct_ident::Unknown(_, buf) => stream.write_all(buf)
-                            .map_err(|e| ::bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
+                        #(#packet_serialize)*
+                        #struct_ident::Unknown(pk) => stream.write_all(pk.buf.as_ref())
+                            .map_err(|e| bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
                                 packet_name: "Unknown",
                                 packet_id: header.packet_id,
                                 error: e.into()
@@ -488,51 +529,66 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                fn deserialize<R: ::std::io::Read>(stream: &mut R) -> Result<(Self, ::bedrock_protocol_core::PacketHeader), ::bedrock_protocol_core::error::PacketCodecError> {
-                    let header = <::bedrock_protocol_core::PacketHeader as ::bedrock_protocol_core::ProtoCodec>::deserialize(stream)
-                        .map_err(::bedrock_protocol_core::error::PacketCodecError::InvalidHeader)?;
+                fn deserialize<R: std::io::Read>(stream: &mut R) -> Result<(Self, bedrock_protocol_core::PacketHeader), bedrock_protocol_core::error::PacketCodecError> {
+                    let header = <bedrock_protocol_core::PacketHeader as bedrock_protocol_core::ProtoCodec>::deserialize(stream)
+                        .map_err(bedrock_protocol_core::error::PacketCodecError::InvalidHeader)?;
 
                     let packet = match header.packet_id {
-                        #(#packet_de)*
+                        #(#packet_deserialize)*
                         unknown => {
                             let mut buf = Vec::new();
                             stream.read_to_end(&mut buf)
-                                .map_err(|e| ::bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
+                                .map_err(|e| bedrock_protocol_core::error::PacketCodecError::InvalidPacket {
                                     packet_name: "Unknown",
                                     packet_id: header.packet_id,
                                     error: e.into(),
                                 })?;
-                            #struct_ident::Unknown(unknown, buf.into_boxed_slice())
+                            #struct_ident::Unknown(Box::new(bedrock_protocol_core::UnknownPacket {
+                                id: unknown,
+                                buf: buf.into_boxed_slice()
+                            }))
                         },
                     };
                     Ok((packet, header))
                 }
 
                 #[inline]
-                fn size_hint(&self, header: &::bedrock_protocol_core::PacketHeader) -> usize {
-                    <::bedrock_protocol_core::PacketHeader as ::bedrock_protocol_core::ProtoCodec>::size_hint(header) + match self {
-                        #(#packet_size_prediction)*
-                        #struct_ident::Unknown(_, buf) => buf.len(),
+                fn size_hint(&self, header: &bedrock_protocol_core::PacketHeader) -> usize {
+                    <bedrock_protocol_core::PacketHeader as bedrock_protocol_core::ProtoCodec>::size_hint(header) + match self {
+                        #(#packet_size_hint)*
+                        #struct_ident::Unknown(pk) => pk.buf.len(),
+                    }
+                }
+
+                #[inline]
+                fn inner(&self) -> &dyn bedrock_protocol_core::DynPacket {
+                    match self {
+                        #(#packet_inner)*
+                        #struct_ident::Unknown(pk) => pk.as_ref(),
+                    }
+                }
+
+                #[inline]
+                fn into_inner(self) -> Box<dyn bedrock_protocol_core::DynPacket> {
+                    match self {
+                        #(#packet_into_inner)*
+                        #struct_ident::Unknown(pk) => pk,
                     }
                 }
             }
 
-            use super::ProtoVersionPackets;
             impl ProtoVersionPackets for #struct_ident {
                 #(#proto_version_packets_impl)*
             }
 
-            use super::ProtoVersionTypes;
             impl ProtoVersionTypes for #struct_ident {
                 #(#proto_version_types_impl)*
             }
 
-            use super::ProtoVersionEnums;
             impl ProtoVersionEnums for #struct_ident {
                 #(#proto_version_enums_impl)*
             }
 
-            use super::ProtoVersion;
             impl ProtoVersion for #struct_ident {
                 const PROTOCOL_VERSION: u32 = #version;
                 const PROTOCOL_BRANCH: &str = #branch;
@@ -544,28 +600,42 @@ pub fn define_versions_internal(input: TokenStream) -> TokenStream {
         let feature_str = LitStr::new(&mod_ident.to_string(), mod_ident.span());
 
         let version_mod_tokens = quote! {
+            #![allow(unused)]
+
             #[cfg(feature = #feature_str)]
-            mod #mod_ident {
+            mod inner {
                 #version_tokens
             }
             #[cfg(feature = #feature_str)]
-            pub use #mod_ident::*;
+            pub use inner::*;
         };
 
-        versions_stream.extend(version_mod_tokens);
+        let file = syn::parse2(version_mod_tokens).unwrap();
+
+        fs::write(
+            path.join(format!("src/generated/{}.rs", mod_ident)),
+            prettyplease::unparse(&file),
+        )
+        .unwrap();
+
+        versions_stream.extend(quote! {
+            mod #mod_ident;
+            pub use #mod_ident::*;
+        })
     }
 
     quote! {
+        #![allow(unused)]
+
         #proto_version
 
         #versions_stream
     }
-    .into()
 }
 
 fn collapse(
     list: &Option<DefineVersionsDiffList>,
-    map: &mut HashMap<Ident, proc_macro2::TokenStream>,
+    map: &mut HashMap<Ident, TokenStream>,
 ) -> syn::Result<()> {
     if let Some(diff_list) = list {
         for entry in &diff_list.entries {
