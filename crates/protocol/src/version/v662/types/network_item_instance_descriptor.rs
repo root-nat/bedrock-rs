@@ -8,7 +8,7 @@ pub struct NetworkItemInstanceDescriptor {
     stack_size: Option<u16>,
     aux_value: Option<u32>,
     block_runtime_id: Option<i32>,
-    user_data_buffer: Option<String>,
+    user_data_buffer: Option<Vec<u8>>,
 }
 
 impl ProtoCodec for NetworkItemInstanceDescriptor {

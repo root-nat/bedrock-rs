@@ -42,7 +42,7 @@ pub enum SubChunkRequestResult {
 pub struct SubChunkDataEntry<V: ProtoVersion> {
     pub sub_chunk_pos_offset: V::SubChunkPosOffset,
     pub sub_chunk_request_result: SubChunkRequestResult,
-    pub serialized_sub_chunk: Option<String>, // If sub_chunk_request_result != SuccessAllAir, or cache_enabled == false
+    pub serialized_sub_chunk: Option<Vec<u8>>, // If sub_chunk_request_result != SuccessAllAir, or cache_enabled == false
     pub height_map_data_type: HeightMapDataType,
     pub height_map_data: Option<[[i8; 16]; 16]>, // If height_map_data_type == HasData (vec sizes are i8)
     pub render_height_map_data_type: HeightMapDataType,
@@ -104,7 +104,7 @@ impl<V: ProtoVersion> ProtoCodec for SubChunkPacket<V> {
                     != SubChunkRequestResult::SuccessAllAir
                     || !cache_enabled
                 {
-                    true => Some(String::deserialize(stream)?),
+                    true => Some(<Vec<u8>>::deserialize(stream)?),
                     false => None,
                 };
                 let height_map_data_type = HeightMapDataType::deserialize(stream)?;
