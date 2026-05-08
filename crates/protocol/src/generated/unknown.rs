@@ -444,9 +444,7 @@ mod inner {
         type ScoreboardId = ();
         type SerializedAbilitiesData = ();
         type SerializedSkin = ();
-        type ShapedChemistryRecipe = ();
         type ShapedRecipe = ();
-        type ShapelessChemistryRecipe = ();
         type ShapelessRecipe = ();
         type ShulkerBoxRecipe = ();
         type SmithingTransformRecipe = ();

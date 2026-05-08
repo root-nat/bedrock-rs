@@ -7758,9 +7758,7 @@ mod inner {
         type ScoreboardId = crate::version::v662::types::ScoreboardId;
         type SerializedAbilitiesData = crate::version::v662::types::SerializedAbilitiesData<Self>;
         type SerializedSkin = crate::version::v662::types::SerializedSkin<Self>;
-        type ShapedChemistryRecipe = crate::version::v662::types::ShapedChemistryRecipe<Self>;
         type ShapedRecipe = crate::version::v671::types::ShapedRecipe<Self>;
-        type ShapelessChemistryRecipe = crate::version::v662::types::ShapelessChemistryRecipe<Self>;
         type ShapelessRecipe = crate::version::v662::types::ShapelessRecipe<Self>;
         type ShulkerBoxRecipe = crate::version::v662::types::ShulkerBoxRecipe<Self>;
         type SmithingTransformRecipe = crate::version::v662::types::SmithingTransformRecipe<Self>;
