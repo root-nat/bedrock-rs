@@ -397,7 +397,6 @@ versions![
             + AwardAchievementPacket: AwardAchievementPacket,
             % CodeBuilderSourcePacket: CodeBuilderSourcePacket^,
             % ContainerClosePacket: ContainerClosePacket^,
-            % CraftingDataPacket: CraftingDataPacket^,
             % LegacyTelemetryEventPacket: LegacyTelemetryEventPacket^,
             % TextPacket: TextPacket^,
             - TickSyncPacket,

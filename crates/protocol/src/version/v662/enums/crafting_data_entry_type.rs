@@ -10,12 +10,12 @@ pub enum CraftingDataEntryType<V: ProtoVersion> {
     ShapelessRecipe {
         shapeless_recipe: V::ShapelessRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 0,
     ShapedRecipe {
         shaped_recipe: V::ShapedRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 1,
     FurnaceRecipe {
         #[endianness(var)]
@@ -34,31 +34,31 @@ pub enum CraftingDataEntryType<V: ProtoVersion> {
     MultiRecipe {
         multi_recipe: Uuid,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 4,
     ShulkerBoxRecipe {
         shulker_box_recipe: V::ShulkerBoxRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 5,
     ShapelessChemistryRecipe {
         shapeless_chemistry_recipe: V::ShapelessRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 6,
     ShapedChemistryRecipe {
         shaped_chemistry_recipe: V::ShapedChemistryRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 7,
     SmithingTransformRecipe {
         smithing_transform_recipe: V::SmithingTransformRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 8,
     SmithingTrimRecipe {
         smithing_trim_recipe: V::SmithingTrimRecipe,
         #[endianness(var)]
-        net_id: i32,
+        net_id: u32,
     } = 9,
 }
