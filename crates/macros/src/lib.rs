@@ -124,10 +124,10 @@ pub fn packet(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let direction = match args.direction.map(|f| f.value()).as_deref() {
         Some("client_to_server") => {
-            quote! { Some(bedrock_prtocol_core::PacketDirection::ClientToServer)}
+            quote! { Some(bedrock_protocol_core::PacketDirection::ClientToServer)}
         }
         Some("server_to_client") => {
-            quote! { Some(bedrock_prtocol_core::PacketDirection::ServerToClient)}
+            quote! { Some(bedrock_protocol_core::PacketDirection::ServerToClient)}
         }
         _ => quote! { None },
     };
@@ -135,7 +135,7 @@ pub fn packet(args: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #item
 
-        impl #impl_generics ::bedrock_protocol_core::Packet for #name #ty_generics #where_clause {
+        impl #impl_generics bedrock_protocol_core::Packet for #name #ty_generics #where_clause {
             const ID: u16 = #id;
 
             #[cfg(feature = "packet-meta")]
