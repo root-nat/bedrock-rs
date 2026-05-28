@@ -577,9 +577,9 @@ mod inner {
         }
     }
     #[cfg(feature = "packet-dyn")]
-    impl Into<Box<dyn bedrock_protocol_core::PacketDyn>> for Unknown {
-        fn into(self) -> Box<dyn bedrock_protocol_core::PacketDyn> {
-            match self {
+    impl From<Unknown> for Box<dyn bedrock_protocol_core::PacketDyn> {
+        fn from(val: Unknown) -> Box<dyn bedrock_protocol_core::PacketDyn> {
+            match val {
                 Unknown::RequestNetworkSettingsPacket(pk) => pk,
                 Unknown::Unknown(pk) => pk,
             }

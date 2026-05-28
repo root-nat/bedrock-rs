@@ -364,9 +364,9 @@ pub fn build(input: TokenStream, path: &std::path::Path) -> syn::Result<TokenStr
             }
 
             #[cfg(feature = "packet-dyn")]
-            impl Into<Box<dyn bedrock_protocol_core::PacketDyn>> for #struct_ident {
-                fn into(self) -> Box<dyn bedrock_protocol_core::PacketDyn> {
-                    match self {
+            impl From<#struct_ident> for Box<dyn bedrock_protocol_core::PacketDyn> {
+                fn from(val: #struct_ident) -> Box<dyn bedrock_protocol_core::PacketDyn> {
+                    match val {
                         #(#packet_dyn_into)*
                         #struct_ident::Unknown(pk) => pk,
                     }

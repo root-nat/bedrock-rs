@@ -9255,9 +9255,9 @@ mod inner {
         }
     }
     #[cfg(feature = "packet-dyn")]
-    impl Into<Box<dyn bedrock_protocol_core::PacketDyn>> for V924 {
-        fn into(self) -> Box<dyn bedrock_protocol_core::PacketDyn> {
-            match self {
+    impl From<V924> for Box<dyn bedrock_protocol_core::PacketDyn> {
+        fn from(val: V924) -> Box<dyn bedrock_protocol_core::PacketDyn> {
+            match val {
                 V924::ActorEventPacket(pk) => pk,
                 V924::ActorPickRequestPacket(pk) => pk,
                 V924::AddActorPacket(pk) => pk,
