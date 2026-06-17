@@ -11,6 +11,31 @@ pub struct NetworkItemInstanceDescriptor {
     user_data_buffer: Option<Vec<u8>>,
 }
 
+impl NetworkItemInstanceDescriptor {
+    /// An empty descriptor (air / no item).
+    pub fn empty() -> Self {
+        Self {
+            id: 0,
+            stack_size: None,
+            aux_value: None,
+            block_runtime_id: None,
+            user_data_buffer: None,
+        }
+    }
+
+    /// A simple stack of `count` items with network id `id`. For block items, pass the block's
+    /// network runtime id; pass 0 otherwise.
+    pub fn new(id: i32, count: u16, block_runtime_id: i32) -> Self {
+        Self {
+            id,
+            stack_size: Some(count),
+            aux_value: Some(0),
+            block_runtime_id: Some(block_runtime_id),
+            user_data_buffer: Some(Vec::new()),
+        }
+    }
+}
+
 impl ProtoCodec for NetworkItemInstanceDescriptor {
     fn serialize<W: Write>(&self, stream: &mut W) -> Result<(), ProtoCodecError> {
         ProtoCodecVAR::serialize(&self.id, stream)?;
