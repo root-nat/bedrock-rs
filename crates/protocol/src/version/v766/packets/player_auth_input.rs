@@ -12,7 +12,7 @@ use std::io::{Read, Write};
 pub struct PlayerAuthInputPacket<V: ProtoVersion> {
     pub player_rotation: (f32, f32),
     pub player_position: (f32, f32, f32),
-    pub move_vector: (f32, f32, f32),
+    pub move_vector: (f32, f32),
     pub player_head_rotation: f32,
     pub input_data: u128,
     pub input_mode: V::InputMode,
@@ -134,7 +134,7 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
     fn serialize<W: Write>(&self, stream: &mut W) -> Result<(), ProtoCodecError> {
         <(f32, f32) as ProtoCodecLE>::serialize(&self.player_rotation, stream)?;
         <(f32, f32, f32) as ProtoCodecLE>::serialize(&self.player_position, stream)?;
-        <(f32, f32, f32) as ProtoCodecLE>::serialize(&self.move_vector, stream)?;
+        <(f32, f32) as ProtoCodecLE>::serialize(&self.move_vector, stream)?;
         <f32 as ProtoCodecLE>::serialize(&self.player_head_rotation, stream)?;
         <u128 as ProtoCodecVAR>::serialize(&self.input_data, stream)?;
         <V::InputMode as ProtoCodec>::serialize(&self.input_mode, stream)?;
@@ -156,10 +156,11 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
             )?;
         }
         if self.input_data & PlayerAuthInputFlags::PerformBlockActions as u128 != 0 {
-            <Vec<V::PlayerBlockActionData> as ProtoCodec>::serialize(
-                self.player_block_actions.as_ref().ok_or(ProtoCodecError::ExpectedSome("player_block_actions"))?,
-                stream,
-            )?;
+            let actions = self.player_block_actions.as_ref().ok_or(ProtoCodecError::ExpectedSome("player_block_actions"))?;
+            <i32 as ProtoCodecVAR>::serialize(&(actions.len() as i32), stream)?;
+            for action in actions {
+                <V::PlayerBlockActionData as ProtoCodec>::serialize(action, stream)?;
+            }
         }
         if self.input_data & PlayerAuthInputFlags::IsInClientPredictedVehicle as u128 != 0 {
             <ClientPredictedVehicleData<V> as ProtoCodec>::serialize(
@@ -177,7 +178,7 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
     fn deserialize<R: Read>(stream: &mut R) -> Result<Self, ProtoCodecError> {
         let player_rotation = <(f32, f32) as ProtoCodecLE>::deserialize(stream)?;
         let player_position = <(f32, f32, f32) as ProtoCodecLE>::deserialize(stream)?;
-        let move_vector = <(f32, f32, f32) as ProtoCodecLE>::deserialize(stream)?;
+        let move_vector = <(f32, f32) as ProtoCodecLE>::deserialize(stream)?;
         let player_head_rotation = <f32 as ProtoCodecLE>::deserialize(stream)?;
         let input_data = <u128 as ProtoCodecVAR>::deserialize(stream)?;
         let input_mode = <V::InputMode as ProtoCodec>::deserialize(stream)?;
@@ -204,7 +205,16 @@ impl<V: ProtoVersion> ProtoCodec for PlayerAuthInputPacket<V> {
             };
         let player_block_actions =
             match input_data & PlayerAuthInputFlags::PerformBlockActions as u128 != 0 {
-                true => Some(<Vec<V::PlayerBlockActionData> as ProtoCodec>::deserialize(stream)?),
+                true => {
+                    // The block-action count is a SIGNED varint, not the unsigned length the
+                    // generic Vec codec reads, so decode it manually.
+                    let count = <i32 as ProtoCodecVAR>::deserialize(stream)?;
+                    let mut actions = Vec::with_capacity(count.max(0) as usize);
+                    for _ in 0..count.max(0) {
+                        actions.push(<V::PlayerBlockActionData as ProtoCodec>::deserialize(stream)?);
+                    }
+                    Some(actions)
+                }
                 false => None,
             };
         let client_predicted_vehicle =

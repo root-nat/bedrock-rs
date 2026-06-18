@@ -18,7 +18,9 @@ macro_rules! impl_proto_vec {
 
             fn deserialize<R: ::std::io::Read>(stream: &mut R) -> Result<Self, ProtoCodecError> {
                 let len = <u32 as ProtoCodecVAR>::deserialize(stream)?;
-                let mut vec = Vec::with_capacity(len as usize);
+                // Cap the pre-allocation so a corrupt/garbage length cannot trigger a multi-GB
+                // allocation (and OOM abort) before the element reads fail.
+                let mut vec = Vec::with_capacity((len as usize).min(1 << 20));
                 for _ in 0..len {
                     vec.push(T::deserialize(stream)?);
                 }

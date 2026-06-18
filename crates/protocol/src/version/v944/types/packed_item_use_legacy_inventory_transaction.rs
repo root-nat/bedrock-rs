@@ -8,7 +8,6 @@ use std::io::{Read, Write};
 pub struct PackedItemUseLegacyInventoryTransaction<V: ProtoVersion> {
     pub id: i32,
     pub container_slots: Option<Vec<ContainerSlotEntry>>,
-    pub action: V::InventoryTransaction,
     pub action_type: V::ItemUseInventoryTransactionType,
     pub trigger_type: TriggerType,
     pub position: V::NetworkBlockPosition,
@@ -64,7 +63,6 @@ impl<V: ProtoVersion> ProtoCodec for PackedItemUseLegacyInventoryTransaction<V> 
             }
         }
 
-        self.action.serialize(stream)?;
         self.action_type.serialize(stream)?;
         self.trigger_type.serialize(stream)?;
         self.position.serialize(stream)?;
@@ -93,7 +91,6 @@ impl<V: ProtoVersion> ProtoCodec for PackedItemUseLegacyInventoryTransaction<V> 
                 Some(vec)
             }
         };
-        let action = V::InventoryTransaction::deserialize(stream)?;
         let action_type = V::ItemUseInventoryTransactionType::deserialize(stream)?;
         let trigger_type = TriggerType::deserialize(stream)?;
         let position = V::NetworkBlockPosition::deserialize(stream)?;
@@ -109,7 +106,6 @@ impl<V: ProtoVersion> ProtoCodec for PackedItemUseLegacyInventoryTransaction<V> 
         Ok(Self {
             id,
             container_slots,
-            action,
             action_type,
             trigger_type,
             position,
@@ -130,7 +126,6 @@ impl<V: ProtoVersion> ProtoCodec for PackedItemUseLegacyInventoryTransaction<V> 
                 0 => 0,
                 _ => self.container_slots.as_ref().map_or(0, |vec| vec.len() + vec.iter().map(|i| i.size_hint()).sum::<usize>()),
             }
-            + self.action.size_hint()
             + self.action_type.size_hint()
             + self.trigger_type.size_hint()
             + self.position.size_hint()
