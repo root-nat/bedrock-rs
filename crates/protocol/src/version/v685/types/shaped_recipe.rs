@@ -22,10 +22,10 @@ impl<V: ProtoVersion> ProtoCodec for ShapedRecipe<V> {
     fn serialize<W: Write>(&self, stream: &mut W) -> Result<(), ProtoCodecError> {
         self.recipe_unique_id.serialize(stream)?;
 
-        let x_len: u32 = self.ingredient_grid.len().try_into()?;
-        let y_len: u32 = self.ingredient_grid[0].len().try_into()?;
-        <u32 as ProtoCodecVAR>::serialize(&x_len, stream)?;
-        <u32 as ProtoCodecVAR>::serialize(&y_len, stream)?;
+        let x_len: i32 = self.ingredient_grid.len().try_into()?;
+        let y_len: i32 = self.ingredient_grid[0].len().try_into()?;
+        <i32 as ProtoCodecVAR>::serialize(&x_len, stream)?;
+        <i32 as ProtoCodecVAR>::serialize(&y_len, stream)?;
         for y in &self.ingredient_grid {
             for recipe in y {
                 recipe.serialize(stream)?;
@@ -51,8 +51,8 @@ impl<V: ProtoVersion> ProtoCodec for ShapedRecipe<V> {
         let recipe_unique_id = String::deserialize(stream)?;
 
         let ingredient_grid = {
-            let x_len = <u32 as ProtoCodecVAR>::deserialize(stream)?;
-            let y_len = <u32 as ProtoCodecVAR>::deserialize(stream)?;
+            let x_len = <i32 as ProtoCodecVAR>::deserialize(stream)?;
+            let y_len = <i32 as ProtoCodecVAR>::deserialize(stream)?;
             let mut x_vec = Vec::with_capacity(x_len.try_into()?);
             for _ in 0..x_len {
                 let mut y_vec = Vec::with_capacity(y_len.try_into()?);

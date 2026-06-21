@@ -3,7 +3,7 @@ use bedrock_macros::ProtoCodec;
 
 #[derive(ProtoCodec, Clone, Debug)]
 pub struct RecipeUnlockingRequirement<V: ProtoVersion> {
-    context: UnlockingContext<V>,
+    pub context: UnlockingContext<V>,
 }
 
 #[derive(ProtoCodec, Clone, Debug)]

@@ -1,4 +1,10 @@
+// `CraftResults` keeps the `#[deprecated]` marker (it is Mojang's deprecated craft-results action),
+// but its fields must still be (de)serialized by the generated ProtoCodec impl in this module, which
+// would otherwise raise self-referential deprecation warnings.
+#![allow(deprecated)]
+
 use crate::ProtoVersion;
+use crate::version::v712::types::ItemStackWithoutUserData;
 use bedrock_macros::ProtoCodec;
 
 #[derive(ProtoCodec, Clone, Debug)]
@@ -68,8 +74,11 @@ pub enum ItemStackRequestActionType<V: ProtoVersion> {
         ingredients: Vec<V::ItemDescriptorType>,
     } = 13,
     CraftCreative {
+        // The client sends this as a plain UNSIGNED varint (gophertunnel's CreativeItemNetworkID is
+        // uint32), so it must be decoded as `u32` — decoding as a signed/zigzag `i32` mangles it
+        // (e.g. a wire value of 21 reads back as -11).
         #[endianness(var)]
-        creative_item_network_id: i32,
+        creative_item_network_id: u32,
         number_of_requested_crafts: i8,
     } = 14,
     CraftRecipeOptional {
@@ -93,10 +102,13 @@ pub enum ItemStackRequestActionType<V: ProtoVersion> {
     CraftNonImplemented = 18,
     #[deprecated = "Ask Tylaing"]
     CraftResults {
-        // TODO:
-        // #[vec_repr(i32)]
-        // #[vec_endianness(var)]
-        // result_items: Vec<Item>
-        // times_crafted: i8,
+        // Wire (PMMP CraftResultsDeprecatedStackRequestAction / gophertunnel): an unsigned-varint
+        // count, then `count` ItemStackWithoutUserData entries, then a single byte (times_crafted).
+        // These fields MUST be read — leaving them out under-reads the action and corrupts every
+        // following action in the same ItemStackRequest.
+        #[vec_repr(u32)]
+        #[vec_endianness(var)]
+        result_items: Vec<ItemStackWithoutUserData>,
+        times_crafted: u8,
     } = 19,
 }

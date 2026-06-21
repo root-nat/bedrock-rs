@@ -11,4 +11,5 @@ export!(camera_preset);
 export!(full_container_name);
 export!(item_stack_request_slot_info);
 export!(item_stack_response_container_info);
+export!(item_stack_without_user_data);
 export!(packed_item_use_legacy_inventory_transaction);
